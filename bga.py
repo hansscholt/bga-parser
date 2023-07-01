@@ -1,8 +1,10 @@
 import struct
+import sys
+import os
 from PIL import Image
 
-def BaseHeader(bgatype):
-    f = open("output.lua", "w")
+def BaseHeader(bgatype, basepath):
+    f = open(os.path.join(basepath,"output.lua"), "w")
     f.write("local BGAOPTION = 1;\n")
     f.write("if PREFSMAN:GetPreference('BackgroundFitMode') == 'BackgroundFitMode_CoverDistort' then\n")
     f.write("	BGAOPTION = 2;\n")
@@ -32,7 +34,7 @@ def BaseHeader(bgatype):
     f.write("\n")
     f.close()
 
-def BGA1(in_file):
+def BGA1(in_file, basepath):
     print("BGA1")
     # 64	spr name
     # 4		number of instructions
@@ -56,13 +58,30 @@ def BGA1(in_file):
     
     # read the entire .bga file
     while True:
-        sprName = bytes.fromhex(in_file.read(64).hex()).decode('utf-8')
+        hexdata = in_file.read(1).hex()
+        if len(hexdata) == 0:
+            break
+        else:
+            in_file.seek(in_file.tell() - 1)
+        # sprName = bytes.fromhex(in_file.read(64).hex()).decode('utf-8')
+        # not all spr comes with the name after the first 16 bytes so we have to look for it 
+        # sprName = ""        
+        while True:
+            sprName = in_file.read(1).hex()
+            if sprName != "00":                
+                in_file.seek(in_file.tell() - 1)
+                sprName = bytes.fromhex(in_file.read(64).hex()).decode('utf-8')
+                break
+        
+        if len(sprName) == 1:
+            continue
         blockNumber = int.from_bytes(bytes.fromhex(in_file.read(4).hex()), 'little')
         
         sprData = {}
+        
         sprData['sprName'] = sprName.rstrip('\x00')
         sprData['blockNumber'] = blockNumber
-        
+        # print(sprData['sprName'])
         allBlockData = []
         for b in range(blockNumber):
             currentBlockData = []
@@ -79,15 +98,11 @@ def BGA1(in_file):
         sprData['blockData'] = allBlockData
         allSPRList.append(sprData)
         
-        hexdata = in_file.read(1).hex()
-        if len(hexdata) == 0:
-            break
-        else:
-            in_file.seek(in_file.tell() - 1)
+        
     
     # read each spr
     for spr in allSPRList:
-        f = open(spr["sprName"], "r")
+        f = open(os.path.join(basepath,spr["sprName"]), "r")
         sprType = f.readline()
         if sprType.split()[1].lower() == "ani":
             spr["type"] = "ani"
@@ -111,7 +126,7 @@ def BGA1(in_file):
                 imageData["imageName"] = lineData[1]
                 lineData = [i for j, i in enumerate(lineData) if j not in (0,1)]                
                 imageData["coords"] = lineData
-                im = Image.open(imageData["imageName"].split(".")[0] + ".png")
+                im = Image.open(os.path.join(basepath,imageData["imageName"].split(".")[0] + ".png"))
                 # width, height = im.size
                 # print(im.size)
                 imageData["imageSize"] = im.size
@@ -124,7 +139,8 @@ def BGA1(in_file):
         f.close()
     
     print("end")
-    f = open("output.lua", "a")
+    
+    f = open(os.path.join(basepath,"output.lua"), "a")
     intCounter = 0
     for spr in allSPRList:
         if spr["type"] == "ani":
@@ -284,25 +300,29 @@ def BGA1(in_file):
 def BGA2():
     print("BGA2")
 
-def HexView():
+def Main():
+    if len(sys.argv) <= 1:
+        print("usage: bga.py [folder/file.bga]")
+        return
+    parambga= sys.argv[1]
+    # print(parambga)
     offsetmain = [ 4, 12]
     offsetmainList = []
     # 4       bga type
-    # 12      air
-    
-   
-    
-   
-    with open("101.bga", 'rb') as in_file:
+    # 12      still can't decode this, I don't know if this has something to do with the first spr name
+
+    head_tail = os.path.split(parambga)
+
+    with open(parambga, 'rb') as in_file:
         for om in offsetmain:
             hexdata = in_file.read(om).hex()
             offsetmainList.append(hexdata)
             # print(">" + hexdata.upper())
         # print("next block") 
          
-        BaseHeader(offsetmainList[0])
+        BaseHeader(offsetmainList[0], head_tail[0])
         if offsetmainList[0] == "42474100":
-            BGA1(in_file)
+            BGA1(in_file, head_tail[0])
         elif offsetmainList[0] == "42474132":
             BGA2()
         
@@ -312,4 +332,4 @@ def HexView():
         # f.write("append content")
         # f.close()
                 
-HexView()
+Main()
