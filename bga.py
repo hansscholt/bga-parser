@@ -81,7 +81,6 @@ def BGA1(in_file, basepath):
         
         sprData['sprName'] = sprName.rstrip('\x00')
         sprData['blockNumber'] = blockNumber
-        # print(sprData['sprName'])
         allBlockData = []
         for b in range(blockNumber):
             currentBlockData = []
@@ -96,6 +95,8 @@ def BGA1(in_file, basepath):
             allBlockData.append(currentBlockData)   
             
         sprData['blockData'] = allBlockData
+        if blockNumber == 0:
+            continue;
         allSPRList.append(sprData)
         
         
@@ -110,6 +111,16 @@ def BGA1(in_file, basepath):
             spr["type"] = "tile"
         elif sprType.split()[1].lower() == "pattern":
             spr["type"] = "pattern"
+            if len(sprType.split()) < 5:
+                print("not valid pattern spr type")
+                continue
+            else:
+                spr["p_rows"] = sprType.split()[3]
+                spr["p_cols"] = sprType.split()[4]
+                spr["p_checked"] = sprType.split()[2]
+                # print(sprType.split()[2])
+                # print(sprType.split()[4])
+                # print(spr["sprName"])
         else:
             spr["type"] = "uknown_type"
         # print(sprType)
@@ -148,6 +159,14 @@ def BGA1(in_file, basepath):
             f.write("local Sleep" + spr["sprName"].split(".")[0] + str(intCounter) + "=0.1;" + "\n")
         f.write("----------------" + spr["sprName"] + "----------------\n")
         f.write("----------------" + spr["type"] + "----------------\n")
+        if spr["type"] == "pattern":
+            f.write("for x=1, 5 do\n")
+            # spr["p_rows"]
+            f.write("for y=1, 5 do\n")
+            f.write("local State" + spr["sprName"].split(".")[0] + str(intCounter) + "= 0 + x;\n")
+            f.write("local Sleep" + spr["sprName"].split(".")[0] + str(intCounter) + "=0.1;\n")
+            # f.write("local Statem_mask1=0 + x;\n")
+            # f.write("local Sleepm_mask1=0.1;\n")
         f.write("t[#t+1] = Def.ActorFrame\n")
         f.write("{\n")
         f.write("   OnCommand=cmd(visible,false;")        
@@ -189,7 +208,7 @@ def BGA1(in_file, basepath):
                     f.write("queuecommand('Animate" + str(b + 1) + "');\n")
             
             # print(str(len(spr["imageInfo"])))
-            if spr["type"] == "ani":
+            if spr["type"] == "ani" or spr["type"] == "pattern":
                 if b < blockCount - 1:
                     sleepTime = (spr["blockData"][b + 1][0] - spr["blockData"][b][0]) / len(spr["imageInfo"]) / 60
                 f.write("       Sleep" + spr["sprName"].split(".")[0] + str(intCounter) + "=" + str(sleepTime) + ";" + "\n")
@@ -204,7 +223,14 @@ def BGA1(in_file, basepath):
             f.write("   end;\n")
         
         # print("-")
-        f.write("   EndAnimationCommand=cmd(visible,false);\n")
+        
+        if spr["type"] == "pattern":
+            f.write("   EndAnimationCommand=function(self)\n")
+            f.write("      self:visible(false);\n")
+            f.write("      State" + spr["sprName"].split(".")[0] + str(intCounter) + " = -1;\n")
+            f.write("   end;\n")
+        else:
+            f.write("   EndAnimationCommand=cmd(visible,false);\n")
         
         for s in range(len(spr["imageInfo"])):
         # for image in spr["imageInfo"]:
@@ -236,6 +262,16 @@ def BGA1(in_file, basepath):
                 f.write("       end;\n")
                 f.write("       AnimationStart" + spr["sprName"].split(".")[0] + str(intCounter) + "MessageCommand=cmd(finishtweening;queuecommand,'CheckForUpdate');\n")
                 f.write("       AnimationStop" + spr["sprName"].split(".")[0] + str(intCounter) + "MessageCommand=cmd(finishtweening);\n")
+            elif spr["type"] == "pattern":
+                f.write("       CheckForUpdateCommand=function(self)\n")
+                f.write("           self:visible(false);\n")
+                f.write("           if State" + spr["sprName"].split(".")[0] + str(intCounter) + " == " + str(s) + " then\n")
+                f.write("               self:visible(true);\n")
+                f.write("           end;\n")
+                f.write("           if State" + spr["sprName"].split(".")[0] + str(intCounter) + " ~= -1 then\n")
+                f.write("               self:sleep(Sleep" + spr["sprName"].split(".")[0] + str(intCounter) + "):queuecommand('CheckForUpdate');\n")
+                f.write("           end;\n")
+                f.write("       end;\n")
             f.write("   };\n")
         if spr["type"] == "ani":
             f.write("   Def.ActorFrame\n")
@@ -251,9 +287,24 @@ def BGA1(in_file, basepath):
             f.write("       end;\n")
             f.write("       AnimationStart" + spr["sprName"].split(".")[0] + str(intCounter) + "MessageCommand=cmd(finishtweening;queuecommand,'Update');\n")
             f.write("   };\n")
-        
+        elif spr["type"] == "pattern":
+            f.write("   Def.ActorFrame\n")
+            f.write("   {\n")
+            # f.write("       OnCommand=cmd();\n")
+            f.write("       OnCommand=cmd(queuecommand,'Update');\n")
+            f.write("       UpdateCommand=function(self)\n")
+            f.write("          State" + spr["sprName"].split(".")[0] + str(intCounter) + " = State" + spr["sprName"].split(".")[0] + str(intCounter) + " + 1;\n")
+            f.write("          if State" + spr["sprName"].split(".")[0] + str(intCounter) + " >= " + str(len(spr["imageInfo"])) + " then\n")
+            f.write("             State" + spr["sprName"].split(".")[0] + str(intCounter) + " = 0;\n")
+            f.write("          end;\n")
+            f.write("          self:sleep(Sleep" + spr["sprName"].split(".")[0] + str(intCounter) + "):queuecommand('Update');\n")
+            f.write("       end;\n")
+            f.write("   };\n")
         f.write("};\n")
         
+        if spr["type"] == "pattern":
+            f.write("end;\n")
+            f.write("end;\n")
         intCounter += 1
         
         
